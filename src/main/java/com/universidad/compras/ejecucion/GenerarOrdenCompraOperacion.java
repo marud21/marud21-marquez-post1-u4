@@ -1,19 +1,21 @@
 package com.universidad.compras.ejecucion;
 
+import com.universidad.compras.estado.ContextoSolicitud;
+import com.universidad.compras.estado.ResultadoTransicion;
 import com.universidad.compras.modelo.Solicitud;
-import com.universidad.compras.notificacion.EventoCambioEstado;
 import com.universidad.compras.notificacion.PublicadorCambiosEstado;
 
 /**
  * Genera la orden de compra con el proveedor y deja la solicitud EJECUTADA;
  * deshacer cancela la orden y devuelve la solicitud al estado que tenía antes.
+ * Si el estado actual no permite ejecutar, no se contacta al proveedor.
  */
 public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
 
     private final OrdenCompraService ordenCompraService;
     private final Solicitud solicitud;
     private final String proveedor;
-    private final PublicadorCambiosEstado publicador;
+    private final ContextoSolicitud contexto;
     private String numeroOrden;
     private String estadoAnterior;
 
@@ -26,7 +28,7 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
         this.ordenCompraService = ordenCompraService;
         this.solicitud = solicitud;
         this.proveedor = proveedor;
-        this.publicador = publicador;
+        this.contexto = new ContextoSolicitud(solicitud, publicador);
     }
 
     @Override
@@ -41,15 +43,18 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
 
     @Override
     public void ejecutar() {
-        if (!"APROBADA".equals(solicitud.getEstado())) {
-            throw new IllegalStateException("Solo se puede generar la orden de una solicitud APROBADA; "
-                    + solicitud.getId() + " está " + solicitud.getEstado());
+        String estadoPrevio = solicitud.getEstado();
+        ResultadoTransicion transicion = contexto.ejecutar("Orden de compra generada con " + proveedor);
+        if (!transicion.exitosa()) {
+            throw new IllegalStateException(transicion.mensaje());
         }
-        estadoAnterior = solicitud.getEstado();
-        numeroOrden = ordenCompraService.generar(solicitud.getId(), proveedor);
-        solicitud.setEstado("EJECUTADA");
-        publicador.publicar(EventoCambioEstado.de(solicitud, estadoAnterior,
-                "Orden de compra " + numeroOrden + " generada con " + proveedor));
+        try {
+            numeroOrden = ordenCompraService.generar(solicitud.getId(), proveedor);
+        } catch (RuntimeException e) {
+            contexto.revertirA(estadoPrevio, "Falló la generación de la orden: " + e.getMessage());
+            throw e;
+        }
+        estadoAnterior = estadoPrevio;
     }
 
     @Override
@@ -58,10 +63,7 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
             throw new IllegalStateException("No hay orden de compra generada que cancelar para " + solicitud.getId());
         }
         ordenCompraService.cancelar(numeroOrden);
-        String estadoActual = solicitud.getEstado();
-        solicitud.setEstado(estadoAnterior);
-        publicador.publicar(EventoCambioEstado.de(solicitud, estadoActual,
-                "Orden de compra " + numeroOrden + " cancelada"));
+        contexto.revertirA(estadoAnterior, "Orden de compra " + numeroOrden + " cancelada");
         numeroOrden = null;
     }
 

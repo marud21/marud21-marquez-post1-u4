@@ -1,13 +1,16 @@
 package com.universidad.compras.aprobacion;
 
+import com.universidad.compras.estado.ContextoSolicitud;
+import com.universidad.compras.estado.ResultadoTransicion;
 import com.universidad.compras.modelo.Solicitud;
-import com.universidad.compras.notificacion.EventoCambioEstado;
 import com.universidad.compras.notificacion.PublicadorCambiosEstado;
 
 /**
  * Implementación de {@link ServicioAprobacion} que entrega la solicitud al
  * primer eslabón de la cadena. No sabe cuántos niveles existen, en qué orden
- * se consultan ni si una categoría requiere un nivel adicional.
+ * se consultan ni si una categoría requiere un nivel adicional. La decisión de
+ * la cadena se aplica a través del estado de la solicitud, que valida la
+ * transición y notifica a los suscriptores.
  */
 public class ServicioAprobacionPorNiveles implements ServicioAprobacion {
 
@@ -26,9 +29,13 @@ public class ServicioAprobacionPorNiveles implements ServicioAprobacion {
     @Override
     public ResultadoAprobacion evaluar(Solicitud solicitud) {
         ResultadoAprobacion resultado = primerNivel.manejar(solicitud);
-        String estadoAnterior = solicitud.getEstado();
-        solicitud.setEstado(resultado.isAprobada() ? "APROBADA" : "RECHAZADA");
-        publicador.publicar(EventoCambioEstado.de(solicitud, estadoAnterior, resultado.getDetalle()));
+        ContextoSolicitud contexto = new ContextoSolicitud(solicitud, publicador);
+        ResultadoTransicion transicion = resultado.isAprobada()
+                ? contexto.aprobar(resultado.getDetalle())
+                : contexto.rechazar(resultado.getDetalle());
+        if (!transicion.exitosa()) {
+            return new ResultadoAprobacion(false, resultado.getNivelResolutor(), transicion.mensaje());
+        }
         return resultado;
     }
 }
