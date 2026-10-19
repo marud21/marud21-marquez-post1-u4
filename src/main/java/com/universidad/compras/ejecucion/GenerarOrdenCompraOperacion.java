@@ -1,6 +1,8 @@
 package com.universidad.compras.ejecucion;
 
 import com.universidad.compras.modelo.Solicitud;
+import com.universidad.compras.notificacion.EventoCambioEstado;
+import com.universidad.compras.notificacion.PublicadorCambiosEstado;
 
 /**
  * Genera la orden de compra con el proveedor y deja la solicitud EJECUTADA;
@@ -11,13 +13,20 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
     private final OrdenCompraService ordenCompraService;
     private final Solicitud solicitud;
     private final String proveedor;
+    private final PublicadorCambiosEstado publicador;
     private String numeroOrden;
     private String estadoAnterior;
 
     public GenerarOrdenCompraOperacion(OrdenCompraService ordenCompraService, Solicitud solicitud, String proveedor) {
+        this(ordenCompraService, solicitud, proveedor, new PublicadorCambiosEstado());
+    }
+
+    public GenerarOrdenCompraOperacion(OrdenCompraService ordenCompraService, Solicitud solicitud, String proveedor,
+                                       PublicadorCambiosEstado publicador) {
         this.ordenCompraService = ordenCompraService;
         this.solicitud = solicitud;
         this.proveedor = proveedor;
+        this.publicador = publicador;
     }
 
     @Override
@@ -39,6 +48,8 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
         estadoAnterior = solicitud.getEstado();
         numeroOrden = ordenCompraService.generar(solicitud.getId(), proveedor);
         solicitud.setEstado("EJECUTADA");
+        publicador.publicar(EventoCambioEstado.de(solicitud, estadoAnterior,
+                "Orden de compra " + numeroOrden + " generada con " + proveedor));
     }
 
     @Override
@@ -47,7 +58,10 @@ public class GenerarOrdenCompraOperacion implements OperacionSolicitud {
             throw new IllegalStateException("No hay orden de compra generada que cancelar para " + solicitud.getId());
         }
         ordenCompraService.cancelar(numeroOrden);
+        String estadoActual = solicitud.getEstado();
         solicitud.setEstado(estadoAnterior);
+        publicador.publicar(EventoCambioEstado.de(solicitud, estadoActual,
+                "Orden de compra " + numeroOrden + " cancelada"));
         numeroOrden = null;
     }
 

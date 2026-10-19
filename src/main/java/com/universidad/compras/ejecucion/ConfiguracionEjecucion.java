@@ -1,5 +1,6 @@
 package com.universidad.compras.ejecucion;
 
+import com.universidad.compras.notificacion.PublicadorCambiosEstado;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,8 +20,9 @@ public class ConfiguracionEjecucion {
 
     @Bean
     public FabricaOperacionesSolicitud fabricaOperacionesSolicitud(PresupuestoService presupuestoService,
-                                                                   OrdenCompraService ordenCompraService) {
-        return new FabricaOperacionesSolicitud(presupuestoService, ordenCompraService);
+                                                                   OrdenCompraService ordenCompraService,
+                                                                   PublicadorCambiosEstado publicadorCambiosEstado) {
+        return new FabricaOperacionesSolicitud(presupuestoService, ordenCompraService, publicadorCambiosEstado);
     }
 
     @Bean
